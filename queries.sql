@@ -205,3 +205,90 @@ SELECT
     ) AS dense_rank_val
 FROM Students s
 JOIN Enrollments e ON s.student_id = e.student_id;
+
+
+Task 1.5 — Transactions and Isolation
+a. Transaction to Transfer Student from CS101 to CS404
+sql
+-- Task 1.5a: Transaction to transfer student from CS101 to CS404
+
+BEGIN;
+
+-- Delete current enrollment in CS101
+DELETE FROM Enrollments
+WHERE student_id = 101
+  AND course_code = 'CS101';
+
+-- Insert new enrollment in CS404
+INSERT INTO Enrollments (student_id, course_code, enrollment_year, marks_obtained)
+VALUES (101, 'CS404', 2026, 0.00);
+
+-- If the insert fails (e.g., CS404 does not exist), we roll back.
+-- In practice, you would check for errors in your application code and issue ROLLBACK.
+-- Here we show the ROLLBACK branch explicitly:
+
+-- Suppose we detect an error condition and want to roll back:
+-- ROLLBACK;
+
+-- If everything is successful:
+COMMIT;
+In a real application, you would conditionally ROLLBACK if the insert fails.
+
+b. Concurrency Anomaly: Read and Update Before Commit
+Scenario:
+
+Transaction T1 reads marks_obtained.
+
+Transaction T2 updates that value and commits before T1 commits.
+
+T1 reads the value again and gets a different result.
+
+Anomaly name: Unrepeatable Read (also called non-repeatable read).
+
+Minimum isolation level to prevent it: REPEATABLE READ.
+
+At REPEATABLE READ, a transaction sees the same value for a row on repeated reads within the same transaction.
+
+c. Concurrent Inserts Exceeding Capacity
+Scenario:
+
+Two transactions both read the same enrollment count.
+
+Both decide the course has room and insert a new enrollment.
+
+Result: capacity exceeded.
+
+Anomaly name: Write Skew in some contexts, but more precisely this is a lost update / capacity violation due to a concurrency conflict often modeled as a write-write conflict or phantom-like issue in capacity checks.
+
+In classic textbook terms, this is often called a concurrency anomaly due to lack of serializable isolation, sometimes referred to as a capacity violation or update anomaly under concurrent reads and writes.
+
+Isolation level that prevents it: SERIALIZABLE.
+
+At SERIALIZABLE, transactions are effectively executed one after another, so the second transaction will see the updated count after the first commit and can avoid over-capacity inserts.
+
+d. MVCC and Consistent Snapshots
+Scenario:
+
+Reporting transaction T1 begins and reads marks_obtained.
+
+Concurrent write transaction T2 updates that student’s marks and commits.
+
+T1 re-reads the same row.
+
+MVCC behavior:
+
+Under MVCC, T1 sees the version of the row that was visible at the time T1 started (or at the time of the first read, depending on the specific DB implementation).
+
+Even after T2 commits, T1 continues to see the old value for that row, because it operates on a snapshot of the database as it was at the start of T1.
+
+Isolation level guaranteeing a consistent snapshot: SNAPSHOT (in SQL Server) or REPEATABLE READ / SERIALIZABLE with snapshot semantics in PostgreSQL.
+
+In PostgreSQL, REPEATABLE READ and SERIALIZABLE both provide snapshot-based reads where subsequent reads see the same version.
+
+Trade-off:
+
+At SNAPSHOT / REPEATABLE READ / SERIALIZABLE with snapshot behavior, there is a higher chance of read-only transactions blocking or causing conflicts with long-running writes, and potentially more aborted transactions due to serialization conflicts.
+
+Compared to lower isolation levels (like READ COMMITTED), this can reduce concurrency and performance under heavy write load.
+
+
